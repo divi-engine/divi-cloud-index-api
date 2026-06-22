@@ -1,0 +1,30 @@
+{
+  "name": "divi-cloud-index-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --env-file=.env dist/src/main.js",
+    "dev": "node --env-file=.env --import tsx src/main.ts",
+    "cron:cleanup": "node --env-file=.env --import tsx src/jobs/cleanup.ts",
+    "cron:usage": "node --env-file=.env --import tsx src/jobs/usage.ts",
+    "stripe:setup": "node --env-file=.env --import tsx scripts/stripe-setup-products.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.2.2",
+    "postgres": "^3.4.9",
+    "stripe": "^17.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1"
+  }
+}
