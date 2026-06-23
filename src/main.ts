@@ -1,8 +1,10 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { getEnv } from './config.js';
 import { ensureSchema } from './db/sites.js';
 import { registerSiteRoutes } from './routes/sites.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
+
+type RequestWithRawBody = FastifyRequest & { rawBody?: Buffer };
 
 async function main() {
   const env = getEnv();
@@ -13,10 +15,13 @@ async function main() {
     bodyLimit: 1048576,
   });
 
-  // Match application/json with optional charset so Stripe's raw body is preserved for signing.
-  app.addContentTypeParser(/^application\/json(?:;.*)?$/i, { parseAs: 'buffer' }, (req, body, done) => {
+  // Stripe sends `application/json; charset=utf-8`. Fastify's default JSON parser runs for that
+  // media type and does not set rawBody — remove it and replace with a buffer parser (mediaType
+  // fallback covers charset variants).
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
     try {
-      (req as { rawBody?: Buffer }).rawBody = body as Buffer;
+      (req as RequestWithRawBody).rawBody = body as Buffer;
       const text = (body as Buffer).toString('utf8');
       done(null, text ? JSON.parse(text) : {});
     } catch (err) {

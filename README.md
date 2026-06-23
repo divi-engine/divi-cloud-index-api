@@ -120,6 +120,8 @@ In Stripe Dashboard → Webhooks → add endpoint:
 
 **Test vs live:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and the Stripe Dashboard mode must all match. A test checkout (`livemode: false`) requires **test** API keys and the **test** webhook endpoint signing secret (`whsec_…` from the **cloud-index** destination in Test mode). Mixing a live webhook secret with test events (or vice versa) returns HTTP 400: *No signatures found matching the expected signature*.
 
+HTTP 400 **`Missing raw body`** means the default Fastify JSON parser handled the request without preserving bytes (common with `application/json; charset=utf-8`). Deploy the latest API build — it removes the default parser and stores `rawBody` for all JSON requests.
+
 After updating `.env`, use **Resend** on failed events in Stripe → Webhooks → cloud-index, or run a fresh checkout.
 
 ### 6. WordPress (Divi Ajax Filter)
