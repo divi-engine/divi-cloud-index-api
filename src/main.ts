@@ -4,7 +4,8 @@ import fastifyStatic from '@fastify/static';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getEnv } from './config.js';
+import { loadDotEnvFromCwd } from './load-env.js';
+import { getEnv, isAdminEnabled } from './config.js';
 import { ensureSchema } from './db/sites.js';
 import { registerAdminAuthRoutes } from './routes/admin-auth.js';
 import { registerAdminReportRoutes } from './routes/admin-reports.js';
@@ -17,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const adminDistPath = path.join(__dirname, '../../admin/dist');
 
 async function main() {
+  loadDotEnvFromCwd();
   const env = getEnv();
   await ensureSchema();
 
@@ -41,7 +43,10 @@ async function main() {
     }
   });
 
-  app.get('/health', async () => ({ ok: true }));
+  app.get('/health', async () => ({
+    ok: true,
+    admin_enabled: isAdminEnabled(),
+  }));
 
   await registerSiteRoutes(app);
   await registerWebhookRoutes(app);

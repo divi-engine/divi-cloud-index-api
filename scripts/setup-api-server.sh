@@ -95,8 +95,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-EnvironmentFile=${INSTALL_DIR}/.env
-ExecStart=/usr/bin/node ${INSTALL_DIR}/dist/src/main.js
+# Use Node --env-file so passwords with $ or % are parsed correctly (systemd EnvironmentFile expands $).
+ExecStart=/usr/bin/node --env-file=${INSTALL_DIR}/.env ${INSTALL_DIR}/dist/src/main.js
 Restart=on-failure
 RestartSec=5
 
