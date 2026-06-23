@@ -47,6 +47,8 @@ npm run dev
 | POST | `/v1/sites/checkout` | HMAC | Stripe Checkout URL |
 | POST | `/v1/sites/portal` | HMAC | Stripe Customer Portal URL |
 | POST | `/v1/stripe/webhook` | Stripe signature | Billing events |
+| POST | `/v1/admin/login` | — | Admin session cookie |
+| GET | `/v1/admin/*` | Admin cookie | Internal dashboard API |
 
 ### Plugin auth headers
 
@@ -71,6 +73,25 @@ npm run cron:usage     # weekly — reconcile document counts
 | Scale | £35/mo | 100,000 |
 
 14-day trial on Starter limits (card required via Stripe Checkout).
+
+## Admin dashboard
+
+Optional internal UI at **`/admin`** (same host as the API, e.g. `https://cloud-index.diviengine.com/admin`).
+
+Set these in the API `.env` (never commit real values):
+
+| Variable | Purpose |
+|----------|---------|
+| `ADMIN_PASSWORD` | Login password (min 8 characters) |
+| `ADMIN_SESSION_SECRET` | HMAC secret for session cookie (min 16 characters, separate from `PLUGIN_HMAC_SECRET`) |
+| `ADMIN_SESSION_TTL_HOURS` | Session lifetime (default `24`) |
+| `ADMIN_COOKIE_SECURE` | `true` in production HTTPS; set `false` for local HTTP dev |
+
+If `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` is missing, admin routes return **503** and the SPA is not served.
+
+Build includes the admin UI: `npm run build` (runs `build:admin` → `admin/dist/`).
+
+Pages: overview KPIs, customer list/detail, Typesense collections (orphans highlighted), monthly earnings + MRR.
 
 ## Production deploy (`cloud-index.diviengine.com`)
 
