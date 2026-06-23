@@ -144,6 +144,14 @@ define( 'DAF_CLOUD_TYPESENSE_HOST', 'cloud-catalog.staging.example.com' );
 
 Required repo secret: **`DEPLOY_SSH_PRIVATE_KEY`** (same pattern as CutBench — add under Settings → Secrets and variables → Actions).
 
+Paste the **entire** private key file (including `-----BEGIN … KEY-----` and `-----END … KEY-----`). From your machine:
+
+```bash
+cat ~/.ssh/divi_cloud_index_deploy
+```
+
+Copy all output into the secret — do not add quotes. If deploy fails with `error in libcrypto`, the secret was truncated or pasted as one line; delete and re-add it.
+
 Optional variables (defaults shown):
 
 | Variable | Default |
