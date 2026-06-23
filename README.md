@@ -87,7 +87,17 @@ Set these in the API `.env` (never commit real values):
 | `ADMIN_SESSION_TTL_HOURS` | Session lifetime (default `24`) |
 | `ADMIN_COOKIE_SECURE` | `true` in production HTTPS; set `false` for local HTTP dev |
 
-If `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` is missing, admin routes return **503** and the SPA is not served.
+If `ADMIN_PASSWORD` or `ADMIN_SESSION_SECRET` is missing, admin routes return **503** and the SPA shows *Admin dashboard is not configured*.
+
+**Deploy does not sync `.env`.** After adding admin vars locally, copy them to the server file `/opt/divi-cloud-index-api/.env`, then restart:
+
+```bash
+systemctl restart divi-cloud-index-api
+curl -s https://cloud-index.diviengine.com/health
+# {"ok":true,"admin_enabled":true}
+```
+
+Passwords with `$` or `%` must be loaded via Node `--env-file` (not systemd `EnvironmentFile=`). New deploys patch the systemd unit automatically; otherwise run `setup-api-server.sh` again or edit `/etc/systemd/system/divi-cloud-index-api.service` so `ExecStart` includes `--env-file=/opt/divi-cloud-index-api/.env`.
 
 Build includes the admin UI: `npm run build` (runs `build:admin` → `admin/dist/`).
 

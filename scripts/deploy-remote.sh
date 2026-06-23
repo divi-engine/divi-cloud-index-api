@@ -27,6 +27,17 @@ npm ci
 echo "==> npm run build"
 npm run build
 
+echo "==> Ensure systemd loads .env via Node (not EnvironmentFile)"
+UNIT="/etc/systemd/system/${SERVICE_NAME}.service"
+if [[ -f "${UNIT}" ]]; then
+  if grep -q 'EnvironmentFile=.*\.env' "${UNIT}" 2>/dev/null; then
+    sed -i 's|^EnvironmentFile=.*\.env||' "${UNIT}"
+    sed -i "s|ExecStart=/usr/bin/node ${REMOTE_DIR}/dist/src/main.js|ExecStart=/usr/bin/node --env-file=${REMOTE_DIR}/.env ${REMOTE_DIR}/dist/src/main.js|" "${UNIT}"
+    sed -i "s|ExecStart=/usr/bin/node dist/src/main.js|ExecStart=/usr/bin/node --env-file=${REMOTE_DIR}/.env ${REMOTE_DIR}/dist/src/main.js|" "${UNIT}"
+    systemctl daemon-reload
+  fi
+fi
+
 echo "==> systemctl restart ${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 
