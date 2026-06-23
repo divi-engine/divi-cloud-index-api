@@ -35,6 +35,8 @@ export type CloudIndexSiteRow = {
   updated_at: Date;
 };
 
+export type CloudIndexSitePublicRow = Omit<CloudIndexSiteRow, 'api_key_ciphertext'>;
+
 export async function ensureSchema() {
   const db = getDb();
   await db.unsafe(`
@@ -158,4 +160,153 @@ export async function getSiteByStripeSubscription(subscriptionId: string): Promi
     SELECT * FROM cloud_index_sites WHERE stripe_subscription_id = ${subscriptionId} LIMIT 1
   `;
   return rows[0] ?? null;
+}
+
+export async function getSiteByUidPublic(siteUid: string): Promise<CloudIndexSitePublicRow | null> {
+  const db = getDb();
+  const rows = await db<CloudIndexSitePublicRow[]>`
+    SELECT
+      site_uid,
+      site_id_short,
+      site_url,
+      status,
+      tier,
+      document_limit,
+      document_count,
+      stripe_customer_id,
+      stripe_subscription_id,
+      typesense_key_id,
+      trial_ends_at,
+      grace_ends_at,
+      trial_used,
+      last_seen_at,
+      created_at,
+      updated_at
+    FROM cloud_index_sites WHERE site_uid = ${siteUid} LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
+export async function listAllSites(input: {
+  status?: string;
+  tier?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ sites: CloudIndexSitePublicRow[]; total: number }> {
+  const db = getDb();
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const offset = Math.max(input.offset ?? 0, 0);
+  const search = input.search?.trim() ?? '';
+  const searchPattern = search ? `%${search}%` : null;
+
+  const [countRow] = await db<{ count: number }[]>`
+    SELECT COUNT(*)::int AS count FROM cloud_index_sites
+    WHERE (${input.status ?? null}::text IS NULL OR status = ${input.status ?? null})
+      AND (${input.tier ?? null}::text IS NULL OR tier = ${input.tier ?? null})
+      AND (
+        ${searchPattern}::text IS NULL
+        OR site_url ILIKE ${searchPattern}
+        OR site_id_short ILIKE ${searchPattern}
+        OR site_uid::text ILIKE ${searchPattern}
+      )
+  `;
+
+  const sites = await db<CloudIndexSitePublicRow[]>`
+    SELECT
+      site_uid,
+      site_id_short,
+      site_url,
+      status,
+      tier,
+      document_limit,
+      document_count,
+      stripe_customer_id,
+      stripe_subscription_id,
+      typesense_key_id,
+      trial_ends_at,
+      grace_ends_at,
+      trial_used,
+      last_seen_at,
+      created_at,
+      updated_at
+    FROM cloud_index_sites
+    WHERE (${input.status ?? null}::text IS NULL OR status = ${input.status ?? null})
+      AND (${input.tier ?? null}::text IS NULL OR tier = ${input.tier ?? null})
+      AND (
+        ${searchPattern}::text IS NULL
+        OR site_url ILIKE ${searchPattern}
+        OR site_id_short ILIKE ${searchPattern}
+        OR site_uid::text ILIKE ${searchPattern}
+      )
+    ORDER BY updated_at DESC
+    LIMIT ${limit}
+    OFFSET ${offset}
+  `;
+
+  return { sites, total: countRow?.count ?? 0 };
+}
+
+export async function countAllSites(): Promise<number> {
+  const db = getDb();
+  const [row] = await db<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM cloud_index_sites`;
+  return row?.count ?? 0;
+}
+
+export async function countSitesByStatus(): Promise<Record<string, number>> {
+  const db = getDb();
+  const rows = await db<{ status: string; count: number }[]>`
+    SELECT status, COUNT(*)::int AS count FROM cloud_index_sites GROUP BY status
+  `;
+  return Object.fromEntries(rows.map((r) => [r.status, r.count]));
+}
+
+export async function countSitesByTier(): Promise<Record<string, number>> {
+  const db = getDb();
+  const rows = await db<{ tier: string; count: number }[]>`
+    SELECT tier, COUNT(*)::int AS count FROM cloud_index_sites GROUP BY tier
+  `;
+  return Object.fromEntries(rows.map((r) => [r.tier, r.count]));
+}
+
+export async function listAllSiteIdShorts(): Promise<Array<{ site_uid: string; site_id_short: string }>> {
+  const db = getDb();
+  return db<{ site_uid: string; site_id_short: string }[]>`
+    SELECT site_uid, site_id_short FROM cloud_index_sites
+  `;
+}
+
+export async function getOverviewStats(): Promise<{
+  total_sites: number;
+  by_status: Record<string, number>;
+  by_tier: Record<string, number>;
+  active_subscriptions: number;
+  total_documents: number;
+  avg_usage_percent: number;
+}> {
+  const db = getDb();
+  const [totals] = await db<
+    { total: number; active: number; total_documents: number; avg_usage: number | null }[]
+  >`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE status IN ('trialing', 'active'))::int AS active,
+      COALESCE(SUM(document_count), 0)::int AS total_documents,
+      AVG(
+        CASE
+          WHEN document_limit > 0 THEN (document_count::float / document_limit::float) * 100
+          ELSE NULL
+        END
+      ) AS avg_usage
+    FROM cloud_index_sites
+  `;
+
+  return {
+    total_sites: totals?.total ?? 0,
+    by_status: await countSitesByStatus(),
+    by_tier: await countSitesByTier(),
+    active_subscriptions: totals?.active ?? 0,
+    total_documents: totals?.total_documents ?? 0,
+    avg_usage_percent: Math.round(totals?.avg_usage ?? 0),
+  };
 }

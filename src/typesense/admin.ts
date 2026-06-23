@@ -95,3 +95,90 @@ export async function updateKeyCollections(keyId: number, collectionNames: strin
 export async function revokeKey(keyId: number): Promise<void> {
   await typesenseRequest(`/keys/${keyId}`, { method: 'DELETE' });
 }
+
+type TypesenseKey = {
+  id: number;
+  description?: string;
+  collections?: string[];
+  actions?: string[];
+};
+
+export async function listAllCollections(): Promise<TypesenseCollection[]> {
+  return typesenseRequest<TypesenseCollection[]>('/collections');
+}
+
+export async function listAllKeys(): Promise<TypesenseKey[]> {
+  const res = await typesenseRequest<{ keys: TypesenseKey[] }>('/keys');
+  return res.keys ?? [];
+}
+
+export type TypesenseCollectionReportRow = {
+  name: string;
+  num_documents: number;
+  site_uid: string | null;
+  site_id_short: string | null;
+  is_orphan: boolean;
+};
+
+export type TypesenseReport = {
+  collections: TypesenseCollectionReportRow[];
+  keys: TypesenseKey[];
+  total_collections: number;
+  total_documents: number;
+  orphan_count: number;
+  matched_count: number;
+};
+
+export function siteIdShortFromCollectionName(name: string): string | null {
+  const match = /^de_([a-zA-Z0-9]+)_/.exec(name);
+  return match?.[1] ?? null;
+}
+
+export async function buildTypesenseReport(
+  sites: Array<{ site_uid: string; site_id_short: string }>
+): Promise<TypesenseReport> {
+  const byShort = new Map(sites.map((s) => [s.site_id_short, s.site_uid]));
+  const collections = await listAllCollections();
+  const keys = await listAllKeys();
+
+  const cloudCollections = collections.filter((c) => c.name.startsWith('de_'));
+  let totalDocuments = 0;
+  let orphanCount = 0;
+  let matchedCount = 0;
+
+  const rows: TypesenseCollectionReportRow[] = cloudCollections.map((col) => {
+    const numDocuments = col.num_documents ?? 0;
+    totalDocuments += numDocuments;
+    const siteIdShort = siteIdShortFromCollectionName(col.name);
+    const siteUid = siteIdShort ? (byShort.get(siteIdShort) ?? null) : null;
+    const isOrphan = !siteUid;
+    if (isOrphan) {
+      orphanCount += 1;
+    } else {
+      matchedCount += 1;
+    }
+    return {
+      name: col.name,
+      num_documents: numDocuments,
+      site_uid: siteUid,
+      site_id_short: siteIdShort,
+      is_orphan: isOrphan,
+    };
+  });
+
+  rows.sort((a, b) => {
+    if (a.is_orphan !== b.is_orphan) {
+      return a.is_orphan ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  return {
+    collections: rows,
+    keys,
+    total_collections: rows.length,
+    total_documents: totalDocuments,
+    orphan_count: orphanCount,
+    matched_count: matchedCount,
+  };
+}

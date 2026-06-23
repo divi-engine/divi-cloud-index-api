@@ -108,6 +108,7 @@ jobs:
           rsync -az --delete \
             -e "ssh -o StrictHostKeyChecking=yes" \
             --exclude node_modules \
+            --exclude admin/node_modules \
             --exclude dist \
             --exclude .git \
             --exclude .env \

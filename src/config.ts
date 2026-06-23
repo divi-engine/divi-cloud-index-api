@@ -19,6 +19,10 @@ const envSchema = z.object({
   STRIPE_PORTAL_RETURN_URL: z.string().url(),
   CLOUD_INDEX_TRIAL_DAYS: z.coerce.number().default(14),
   CLOUD_INDEX_CANCEL_GRACE_DAYS: z.coerce.number().default(7),
+  ADMIN_PASSWORD: z.string().min(8).optional(),
+  ADMIN_SESSION_SECRET: z.string().min(16).optional(),
+  ADMIN_SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  ADMIN_COOKIE_SECURE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -44,6 +48,30 @@ export const TIER_LIMITS: Record<CloudTier, number> = {
   growth: 25000,
   scale: 100000,
 };
+
+export const TIER_MONTHLY_GBP: Record<CloudTier, number> = {
+  starter: 10,
+  growth: 18,
+  scale: 35,
+};
+
+export function isAdminEnabled(): boolean {
+  const env = getEnv();
+  return Boolean(env.ADMIN_PASSWORD && env.ADMIN_SESSION_SECRET);
+}
+
+export function adminCookieSecure(): boolean {
+  return getEnv().ADMIN_COOKIE_SECURE !== 'false';
+}
+
+export function cloudIndexPriceIds(): Set<string> {
+  const env = getEnv();
+  return new Set([
+    env.STRIPE_PRICE_CLOUD_STARTER,
+    env.STRIPE_PRICE_CLOUD_GROWTH,
+    env.STRIPE_PRICE_CLOUD_SCALE,
+  ]);
+}
 
 export type SubscriptionStatus =
   | 'none'
