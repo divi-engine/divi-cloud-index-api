@@ -4,9 +4,32 @@ import { getEnv } from '../config.js';
 
 const MAX_SKEW_SEC = 300;
 
+type RequestWithRawBody = FastifyRequest & { rawBody?: Buffer };
+
 export function signPayload(parts: string[]): string {
   const env = getEnv();
   return createHmac('sha256', env.PLUGIN_HMAC_SECRET).update(parts.join('.')).digest('hex');
+}
+
+/**
+ * Exact request body bytes used for HMAC (must match what the plugin signed).
+ */
+export function requestBodyForSigning(req: FastifyRequest): string {
+  const method = String(req.method || 'GET').toUpperCase();
+  if (method === 'GET') {
+    return '';
+  }
+
+  const rawBody = (req as RequestWithRawBody).rawBody;
+  if (rawBody && rawBody.length > 0) {
+    return rawBody.toString('utf8');
+  }
+
+  if (req.body && typeof req.body === 'object' && Object.keys(req.body as object).length > 0) {
+    return JSON.stringify(req.body);
+  }
+
+  return '';
 }
 
 export function verifyPluginRequest(req: FastifyRequest): { ok: true } | { ok: false; message: string } {
@@ -29,13 +52,7 @@ export function verifyPluginRequest(req: FastifyRequest): { ok: true } | { ok: f
     return { ok: false, message: 'Timestamp expired' };
   }
 
-  const method = String(req.method || 'GET').toUpperCase();
-  const body =
-    method === 'GET'
-      ? ''
-      : req.body && Object.keys(req.body as object).length > 0
-        ? JSON.stringify(req.body)
-        : '';
+  const body = requestBodyForSigning(req);
   const expected = signPayload([timestamp, siteUid, siteUrl, body]);
   const a = Buffer.from(signature, 'hex');
   const b = Buffer.from(expected, 'hex');

@@ -162,6 +162,7 @@ export async function handleWebhook(rawBody: Buffer, signature: string): Promise
     case 'checkout.session.completed':
       await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
       break;
+    case 'customer.subscription.created':
     case 'customer.subscription.updated':
       await syncSubscriptionState(event.data.object as Stripe.Subscription);
       break;

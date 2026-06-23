@@ -5,7 +5,12 @@ let sql: ReturnType<typeof postgres> | null = null;
 
 export function getDb() {
   if (!sql) {
-    sql = postgres(getEnv().DATABASE_URL, { max: 10 });
+    const url = getEnv().DATABASE_URL;
+    const needsSsl = url.includes('supabase.co') || url.includes('supabase.com');
+    sql = postgres(url, {
+      max: 10,
+      ...(needsSsl ? { ssl: 'require' as const } : {}),
+    });
   }
   return sql;
 }

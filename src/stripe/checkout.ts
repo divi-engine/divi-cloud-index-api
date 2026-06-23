@@ -3,6 +3,19 @@ import { getEnv, priceIdForTier, type CloudTier } from '../config.js';
 import { getStripe } from './client.js';
 import { getSiteByUid, upsertSiteDraft, updateSite } from '../db/sites.js';
 
+export function appendReturnQueryFlag(returnUrl: string, flag: 'success' | 'cancelled'): string {
+  if (returnUrl.includes(`cloud_index=${flag}`)) {
+    return returnUrl;
+  }
+
+  const hashIndex = returnUrl.indexOf('#');
+  const base = hashIndex >= 0 ? returnUrl.slice(0, hashIndex) : returnUrl;
+  const hash = hashIndex >= 0 ? returnUrl.slice(hashIndex) : '';
+  const separator = base.includes('?') ? '&' : '?';
+
+  return `${base}${separator}cloud_index=${flag}${hash}`;
+}
+
 export async function createCheckoutSession(input: {
   siteUid: string;
   siteIdShort: string;
@@ -41,8 +54,8 @@ export async function createCheckoutSession(input: {
   }
 
   const priceId = priceIdForTier(input.tier);
-  const successUrl = `${input.returnUrl}${input.returnUrl.includes('?') ? '&' : '?'}cloud_index=success`;
-  const cancelUrl = `${input.returnUrl}${input.returnUrl.includes('?') ? '&' : '?'}cloud_index=cancelled`;
+  const successUrl = appendReturnQueryFlag(input.returnUrl, 'success');
+  const cancelUrl = appendReturnQueryFlag(input.returnUrl, 'cancelled');
 
   const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
     metadata: {

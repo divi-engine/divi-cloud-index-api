@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { verifyPluginRequest } from '../auth/hmac.js';
 import { upsertSiteDraft, getSiteByUid } from '../db/sites.js';
 import { createCheckoutSession, createPortalSession } from '../stripe/checkout.js';
+import { maybeReconcileSubscriptionFromStripe } from '../stripe/reconcile.js';
 import {
   buildStatusPayload,
   getStoredApiKeyForSite,
@@ -54,6 +55,8 @@ export async function registerSiteRoutes(app: FastifyInstance) {
     await refreshKeyCollections(site);
     await refreshDocumentCount(site);
     site = (await getSiteByUid(site_uid))!;
+
+    site = await maybeReconcileSubscriptionFromStripe(site);
 
     const apiKey = getStoredApiKeyForSite(site);
     return buildStatusPayload(site, apiKey);

@@ -1,0 +1,119 @@
+# Push to `publish` → sync code to Hetzner and rebuild the Cloud Index API (systemd).
+# Server keeps its own `.env` (never overwritten from git).
+#
+# Required GitHub secret:
+#   DEPLOY_SSH_PRIVATE_KEY — private key for SSH (dedicated deploy key recommended)
+#
+# Optional (variable or secret — defaults shown if unset):
+#   DEPLOY_HOST — 5.161.61.154  (IP or hostname only — not user@host, not a URL)
+#   DEPLOY_USER — root
+#   DEPLOY_PATH — /opt/divi-cloud-index-api
+
+name: Publish to production
+
+on:
+  push:
+    branches:
+      - publish
+
+concurrency:
+  group: divi-cloud-index-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Hetzner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy configuration
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          RAW_DEPLOY_HOST: ${{ vars.DEPLOY_HOST || secrets.DEPLOY_HOST || '5.161.61.154' }}
+          RAW_DEPLOY_USER: ${{ vars.DEPLOY_USER || secrets.DEPLOY_USER || 'root' }}
+          RAW_DEPLOY_PATH: ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH || '/opt/divi-cloud-index-api' }}
+        run: |
+          trim() { printf '%s' "$1" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
+
+          DEPLOY_HOST=$(trim "${RAW_DEPLOY_HOST}")
+          DEPLOY_USER=$(trim "${RAW_DEPLOY_USER}")
+          DEPLOY_PATH=$(trim "${RAW_DEPLOY_PATH}")
+
+          if [[ "${DEPLOY_HOST}" == *@* ]]; then
+            DEPLOY_USER=$(trim "${DEPLOY_HOST%%@*}")
+            DEPLOY_HOST=$(trim "${DEPLOY_HOST##*@}")
+          fi
+
+          if [[ -z "${DEPLOY_SSH_PRIVATE_KEY}" ]]; then
+            echo "Missing secret DEPLOY_SSH_PRIVATE_KEY" >&2
+            echo "Add it under Settings → Secrets and variables → Actions → Secrets" >&2
+            exit 1
+          fi
+
+          if [[ -z "${DEPLOY_HOST}" ]]; then
+            echo "DEPLOY_HOST is empty. Remove the DEPLOY_HOST variable/secret or set it to 5.161.61.154" >&2
+            exit 1
+          fi
+
+          host_ok=0
+          [[ "${DEPLOY_HOST}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && host_ok=1
+          [[ "${DEPLOY_HOST}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] && host_ok=1
+          if [[ "${host_ok}" -eq 0 ]]; then
+            echo "Invalid DEPLOY_HOST: use IP or hostname only (no https://, no spaces, no user@)." >&2
+            echo "Current value length: ${#DEPLOY_HOST} chars" >&2
+            exit 1
+          fi
+
+          if [[ ! "${DEPLOY_USER}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "Invalid DEPLOY_USER. Use root or delete the DEPLOY_USER variable/secret." >&2
+            exit 1
+          fi
+
+          if [[ ! "${DEPLOY_PATH}" =~ ^/[a-zA-Z0-9/_.-]+$ ]]; then
+            echo "Invalid DEPLOY_PATH. Use /opt/divi-cloud-index-api or delete the DEPLOY_PATH variable/secret." >&2
+            exit 1
+          fi
+
+          {
+            echo "DEPLOY_HOST=${DEPLOY_HOST}"
+            echo "DEPLOY_USER=${DEPLOY_USER}"
+            echo "DEPLOY_PATH=${DEPLOY_PATH}"
+          } >> "$GITHUB_ENV"
+
+          echo "Deploy target: ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Sync code to server
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p ${DEPLOY_PATH}"
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude .git \
+            --exclude .env \
+            --exclude '*.log' \
+            ./ "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/"
+
+      - name: Build and restart API
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "REMOTE_DIR=${DEPLOY_PATH} bash ${DEPLOY_PATH}/scripts/deploy-remote.sh"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

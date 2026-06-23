@@ -18,6 +18,11 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
       return { received: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Webhook error';
+      if (message.includes('No signatures found')) {
+        req.log.warn(
+          'Stripe webhook signature mismatch — STRIPE_WEBHOOK_SECRET must match the signing secret for this endpoint in the same Stripe mode (test vs live) as STRIPE_SECRET_KEY',
+        );
+      }
       return reply.code(400).send({ error: message });
     }
   });

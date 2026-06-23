@@ -13,7 +13,8 @@ async function main() {
     bodyLimit: 1048576,
   });
 
-  app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+  // Match application/json with optional charset so Stripe's raw body is preserved for signing.
+  app.addContentTypeParser(/^application\/json(?:;.*)?$/i, { parseAs: 'buffer' }, (req, body, done) => {
     try {
       (req as { rawBody?: Buffer }).rawBody = body as Buffer;
       const text = (body as Buffer).toString('utf8');
