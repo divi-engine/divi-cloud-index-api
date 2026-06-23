@@ -120,14 +120,33 @@ export type TypesenseCollectionReportRow = {
   is_orphan: boolean;
 };
 
+export type TypesenseKeyReportRow = {
+  id: number;
+  description: string | null;
+  collections: string[];
+  site_id_short: string | null;
+  site_uid: string | null;
+  site_url: string | null;
+  is_active: boolean;
+  is_stale: boolean;
+};
+
 export type TypesenseReport = {
   collections: TypesenseCollectionReportRow[];
-  keys: TypesenseKey[];
+  keys: TypesenseKeyReportRow[];
   total_collections: number;
   total_documents: number;
   orphan_count: number;
   matched_count: number;
 };
+
+export function siteIdShortFromKeyDescription(description: string | undefined): string | null {
+  if (!description) {
+    return null;
+  }
+  const match = /^cloud-index-([a-zA-Z0-9]+)$/.exec(description.trim());
+  return match?.[1] ?? null;
+}
 
 export function siteIdShortFromCollectionName(name: string): string | null {
   const match = /^de_([a-zA-Z0-9]+)_/.exec(name);
@@ -135,11 +154,24 @@ export function siteIdShortFromCollectionName(name: string): string | null {
 }
 
 export async function buildTypesenseReport(
-  sites: Array<{ site_uid: string; site_id_short: string }>
+  sites: Array<{
+    site_uid: string;
+    site_id_short: string;
+    site_url?: string;
+    typesense_key_id?: number | null;
+  }>
 ): Promise<TypesenseReport> {
-  const byShort = new Map(sites.map((s) => [s.site_id_short, s.site_uid]));
+  const byShort = new Map(
+    sites.map((s) => [
+      s.site_id_short,
+      { site_uid: s.site_uid, site_url: s.site_url ?? '', typesense_key_id: s.typesense_key_id ?? null },
+    ])
+  );
+  const activeKeyIds = new Set(
+    sites.map((s) => s.typesense_key_id).filter((id): id is number => typeof id === 'number')
+  );
   const collections = await listAllCollections();
-  const keys = await listAllKeys();
+  const rawKeys = await listAllKeys();
 
   const cloudCollections = collections.filter((c) => c.name.startsWith('de_'));
   let totalDocuments = 0;
@@ -150,7 +182,8 @@ export async function buildTypesenseReport(
     const numDocuments = col.num_documents ?? 0;
     totalDocuments += numDocuments;
     const siteIdShort = siteIdShortFromCollectionName(col.name);
-    const siteUid = siteIdShort ? (byShort.get(siteIdShort) ?? null) : null;
+    const siteMeta = siteIdShort ? byShort.get(siteIdShort) : undefined;
+    const siteUid = siteMeta?.site_uid ?? null;
     const isOrphan = !siteUid;
     if (isOrphan) {
       orphanCount += 1;
@@ -173,9 +206,36 @@ export async function buildTypesenseReport(
     return a.name.localeCompare(b.name);
   });
 
+  const keyRows: TypesenseKeyReportRow[] = rawKeys
+    .filter((key) => siteIdShortFromKeyDescription(key.description) !== null)
+    .map((key) => {
+      const siteIdShort = siteIdShortFromKeyDescription(key.description);
+      const siteMeta = siteIdShort ? byShort.get(siteIdShort) : undefined;
+      const isActive = activeKeyIds.has(key.id);
+      return {
+        id: key.id,
+        description: key.description ?? null,
+        collections: key.collections ?? [],
+        site_id_short: siteIdShort,
+        site_uid: siteMeta?.site_uid ?? null,
+        site_url: siteMeta?.site_url ?? null,
+        is_active: isActive,
+        is_stale: !isActive && siteMeta !== undefined,
+      };
+    })
+    .sort((a, b) => {
+      if (a.is_stale !== b.is_stale) {
+        return a.is_stale ? 1 : -1;
+      }
+      if (a.is_active !== b.is_active) {
+        return a.is_active ? -1 : 1;
+      }
+      return a.id - b.id;
+    });
+
   return {
     collections: rows,
-    keys,
+    keys: keyRows,
     total_collections: rows.length,
     total_documents: totalDocuments,
     orphan_count: orphanCount,

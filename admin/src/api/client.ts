@@ -55,7 +55,16 @@ export type TypesenseReport = {
     site_id_short: string | null;
     is_orphan: boolean;
   }>;
-  keys: Array<{ id: number; description?: string; collections?: string[] }>;
+  keys: Array<{
+    id: number;
+    description: string | null;
+    collections: string[];
+    site_id_short: string | null;
+    site_uid: string | null;
+    site_url: string | null;
+    is_active: boolean;
+    is_stale: boolean;
+  }>;
   total_collections: number;
   total_documents: number;
   orphan_count: number;

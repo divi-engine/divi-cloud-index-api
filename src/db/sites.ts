@@ -276,6 +276,17 @@ export async function listAllSiteIdShorts(): Promise<Array<{ site_uid: string; s
   `;
 }
 
+export async function listSitesForTypesenseReport(): Promise<
+  Array<{ site_uid: string; site_id_short: string; site_url: string; typesense_key_id: number | null }>
+> {
+  const db = getDb();
+  return db<
+    Array<{ site_uid: string; site_id_short: string; site_url: string; typesense_key_id: number | null }>
+  >`
+    SELECT site_uid, site_id_short, site_url, typesense_key_id FROM cloud_index_sites
+  `;
+}
+
 export async function getOverviewStats(): Promise<{
   total_sites: number;
   by_status: Record<string, number>;

@@ -6,7 +6,7 @@ import {
   getOverviewStats,
   getSiteByUid,
   getSiteByUidPublic,
-  listAllSiteIdShorts,
+  listSitesForTypesenseReport,
   listAllSites,
 } from '../db/sites.js';
 import { getMrrSummary, getMonthlyEarnings } from '../stripe/reports.js';
@@ -132,7 +132,7 @@ export async function registerAdminReportRoutes(app: FastifyInstance) {
         return;
       }
 
-      const sites = await listAllSiteIdShorts();
+      const sites = await listSitesForTypesenseReport();
       const report = await buildTypesenseReport(sites);
       return report;
     }
